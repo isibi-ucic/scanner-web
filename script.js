@@ -80,7 +80,7 @@ async function main() {
     "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite/dist/"
   );
   customTfliteModel = await tflite.loadTFLiteModel(
-    "./models/model_final_tf216.tflite"
+    "./model_final_tf216.tflite"
   );
   logToHTML("Model TFLite kustom siap.");
 

@@ -1,25 +1,29 @@
-// script.js (Versi Final)
+// script.js (Dengan Debug di HTML & Kamera Belakang)
 
-// --- LANGKAH 1: Impor semua library yang dibutuhkan ---
-// Mengimpor ini akan membuat objek 'tf' dan 'tflite' tersedia secara global
+// --- Impor library ---
 import "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js";
 import "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite/dist/tf-tflite.min.js";
-
-// Mengimpor ini secara spesifik mengambil kelas yang kita butuhkan
 import {
   FilesetResolver,
   HandLandmarker,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.js";
 
-// Dapatkan referensi ke elemen HTML
+// --- Referensi Elemen HTML ---
 const video = document.getElementById("webcam");
 const canvas = document.getElementById("canvas");
 const outputDiv = document.getElementById("output");
+const debugOutput = document.getElementById("debug-output"); // Referensi baru
 const ctx = canvas.getContext("2d");
 
-// --- Variabel & Konstanta ---
-let handLandmarker;
-let customTfliteModel;
+// --- Fungsi Baru untuk Logging ke HTML ---
+function logToHTML(message) {
+  debugOutput.innerHTML += `> ${message}<br>`;
+  // Auto-scroll ke pesan terbaru
+  debugOutput.scrollTop = debugOutput.scrollHeight;
+}
+
+// ... (Variabel & Konstanta lainnya tetap sama)
+let handLandmarker, customTfliteModel;
 const LABELS = [
   "A",
   "B",
@@ -48,8 +52,6 @@ const LABELS = [
   "Y",
   "Z",
 ];
-
-// ... (variabel untuk merangkai kata tetap sama) ...
 let currentSentence = "",
   lastPredictedLetter = "",
   lastAddedLetter = "",
@@ -58,7 +60,8 @@ const PREDICTION_THRESHOLD = 10;
 
 // --- FUNGSI UTAMA ---
 async function main() {
-  // 1. Inisialisasi MediaPipe Hand Landmarker
+  logToHTML("Memulai inisialisasi...");
+
   const filesetResolver = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
   );
@@ -71,41 +74,50 @@ async function main() {
     runningMode: "VIDEO",
     numHands: 1,
   });
-  console.log("Hand Landmarker siap.");
+  logToHTML("Hand Landmarker siap.");
 
-  // --- LANGKAH 2: PERBAIKAN TFLITE (INI KUNCINYA) ---
-  // Beritahu TFLite di mana harus mencari file pendukungnya (Wasm backend)
   tflite.setWasmPath(
     "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite/dist/"
   );
-
-  // Muat model TFLite kustom Anda
   customTfliteModel = await tflite.loadTFLiteModel(
-    "./model_final_tf216.tflite"
+    "./models/model_final_tf216.tflite"
   );
-  console.log("Model TFLite kustom siap.");
+  logToHTML("Model TFLite kustom siap.");
+
   outputDiv.innerText = "Arahkan tangan";
 
-  // 3. Setup Kamera & Mulai Loop
   await setupCamera();
   predictWebcam();
 }
 
-// ... (Fungsi setupCamera, predictWebcam, processPrediction, dan drawLandmarks tetap sama persis seperti sebelumnya) ...
 async function setupCamera() {
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-  video.srcObject = stream;
-  video.addEventListener("loadeddata", () => {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-  });
+  logToHTML("Setup kamera...");
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        // --- PERUBAHAN KAMERA BELAKANG ---
+        facingMode: "environment",
+      },
+    });
+    video.srcObject = stream;
+    video.addEventListener("loadeddata", () => {
+      logToHTML("Kamera berhasil dimuat.");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    });
+  } catch (err) {
+    logToHTML(`Error kamera: ${err.message}`);
+  }
 }
 
 function predictWebcam() {
   const results = handLandmarker.detectForVideo(video, performance.now());
+
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
   if (results.landmarks.length > 0) {
     drawLandmarks(results.landmarks);
+
     const landmarks = results.landmarks[0];
     const wrist = landmarks[0];
     const normalizedLandmarks = [];
@@ -113,6 +125,7 @@ function predictWebcam() {
       normalizedLandmarks.push(lm.x - wrist.x);
       normalizedLandmarks.push(lm.y - wrist.y);
     }
+
     const inputTensor = tf.tensor2d([normalizedLandmarks], [1, 42]);
     const prediction = customTfliteModel.predict(inputTensor);
     const predictionData = prediction.dataSync();
@@ -120,10 +133,13 @@ function predictWebcam() {
       Math.max(...predictionData)
     );
     const predictedLetter = LABELS[highestProbIndex];
+
     processPrediction(predictedLetter);
+
     inputTensor.dispose();
     prediction.dispose();
   }
+
   window.requestAnimationFrame(predictWebcam);
 }
 function processPrediction(newPrediction) {
@@ -143,31 +159,41 @@ function processPrediction(newPrediction) {
   }
   outputDiv.innerText = currentSentence + (lastPredictedLetter || "");
 }
+
+// --- FUNGSI UNTUK MENGGAMBAR LANDMARK ---
 function drawLandmarks(landmarks) {
+  // Definisikan kuas
+  const pointPaint = { color: "#00FF00", radius: 5 };
+  const linePaint = { color: "#FFFFFF", lineWidth: 3 };
+
+  // Loop melalui setiap tangan yang terdeteksi (meskipun kita set hanya 1)
   for (const landmark of landmarks) {
+    // Gambar garis koneksi terlebih dahulu
     for (const connection of HandLandmarker.HAND_CONNECTIONS) {
       const start = landmark[connection.start];
       const end = landmark[connection.end];
       ctx.beginPath();
       ctx.moveTo(start.x * canvas.width, start.y * canvas.height);
       ctx.lineTo(end.x * canvas.width, end.y * canvas.height);
-      ctx.strokeStyle = "#FFFFFF";
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = linePaint.color;
+      ctx.lineWidth = linePaint.lineWidth;
       ctx.stroke();
     }
+    // Gambar titik sendi di atas garis
     for (const point of landmark) {
       ctx.beginPath();
       ctx.arc(
         point.x * canvas.width,
         point.y * canvas.height,
-        5,
+        pointPaint.radius,
         0,
         2 * Math.PI
       );
-      ctx.fillStyle = "#00FF00";
+      ctx.fillStyle = pointPaint.color;
       ctx.fill();
     }
   }
 }
+
 // Jalankan semuanya
 main();

@@ -65,7 +65,7 @@ async function main() {
   handLandmarker = await HandLandmarker.createFromOptions(filesetResolver, {
     baseOptions: {
       modelAssetPath:
-        "https://storage.googleapis.com/mediapipe-models/hand_landmarke...float16/1/hand_landmarker.task",
+        "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
       delegate: "GPU",
     },
     runningMode: "VIDEO",
@@ -81,7 +81,7 @@ async function main() {
 
   // Muat model TFLite kustom Anda
   customTfliteModel = await tflite.loadTFLiteModel(
-    "./models/model_final_tf216.tflite"
+    "./model_final_tf216.tflite"
   );
   console.log("Model TFLite kustom siap.");
   outputDiv.innerText = "Arahkan tangan";

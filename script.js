@@ -86,23 +86,28 @@ async function main() {
   outputDiv.innerText = "Arahkan tangan";
 
   await setupCamera();
-  predictWebcam();
+  // predictWebcam();
 }
+// Di dalam script.js
 
 async function setupCamera() {
   logToHTML("Setup kamera...");
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
-        // --- PERUBAHAN KAMERA BELAKANG ---
         facingMode: "environment",
       },
     });
     video.srcObject = stream;
+
+    // Tambahkan event listener ini
     video.addEventListener("loadeddata", () => {
-      logToHTML("Kamera berhasil dimuat.");
+      logToHTML("Kamera berhasil dimuat. Memulai deteksi...");
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
+
+      // MULAI LOOP PREDIKSI DI SINI
+      predictWebcam();
     });
   } catch (err) {
     logToHTML(`Error kamera: ${err.message}`);

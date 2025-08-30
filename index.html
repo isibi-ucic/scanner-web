@@ -2,42 +2,6 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>I-Sibi Scanner</title>
-    <style>
-        body {
-            margin: 0;
-            background-color: #333;
-        }
-
-        #container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-        }
-
-        video,
-        canvas {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) scaleX(-1);
-            /* Efek cermin */
-        }
-
-        #output {
-            position: absolute;
-            bottom: 20px;
-            width: 100%;
-            text-align: center;
-            font-size: 5rem;
-            font-weight: bold;
-            color: white;
-            text-shadow: 2px 2px 4px black;
-            font-family: sans-serif;
-        }
-    </style>
 </head>
 
 <body>
@@ -47,11 +11,7 @@
         <div id="output">Memuat...</div>
     </div>
 
-    <script type="module" src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js"></script>
-    <script type="module" src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite/dist/tf-tflite.min.js"></script>
-    <script type="module" src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.js"></script>
-
-    <script type="module" src="script.js" defer></script>
+    <script type="module" src="script.js"></script>
 </body>
 
 </html>

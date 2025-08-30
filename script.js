@@ -199,5 +199,19 @@ function drawLandmarks(landmarks) {
   }
 }
 
+function resetSentence() {
+  logToHTML("Kalimat direset.");
+  currentSentence = "";
+  lastAddedLetter = "";
+  lastPredictedLetter = "";
+  predictionCounter = 0;
+  // Update tampilan output
+  outputDiv.innerText = "Arahkan tangan";
+}
+
+// Tambahkan event listener untuk tombol
+const resetButton = document.getElementById("reset-button");
+resetButton.addEventListener("click", resetSentence);
+
 // Jalankan semuanya
 main();

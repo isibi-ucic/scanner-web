@@ -167,7 +167,7 @@ function processPrediction(newPrediction) {
 // --- FUNGSI UNTUK MENGGAMBAR LANDMARK ---
 function drawLandmarks(landmarks) {
   // Definisikan kuas
-  const pointPaint = { color: "#00FF00", radius: 5 };
+  const pointPaint = { color: "#3399FF", radius: 5 };
   const linePaint = { color: "#FFFFFF", lineWidth: 3 };
 
   // Loop melalui setiap tangan yang terdeteksi (meskipun kita set hanya 1)

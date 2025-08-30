@@ -97,6 +97,7 @@ async function setupCamera() {
       video: {
         // --- PERUBAHAN KAMERA BELAKANG ---
         facingMode: "environment",
+        
       },
     });
     video.srcObject = stream;

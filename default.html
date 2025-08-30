@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaPipe Hand Tracking Test</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        /* Kontainer untuk menumpuk video dan kanvas */
+        .container {
+            position: relative;
+            width: 90vw;
+            max-width: 800px;
+        }
+
+        /* Membuat video dan kanvas memiliki rasio 16:9 */
+        .container-inner {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%;
+            /* 16:9 Aspect Ratio (9 / 16 = 0.5625) */
+        }
+
+        video,
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            /* Efek cermin untuk kamera depan agar lebih intuitif */
+            transform: scaleX(-1);
+        }
+
+        canvas {
+            z-index: 10;
+            /* Pastikan kanvas berada di atas video */
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="container-inner">
+            <video id="webcam" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+        </div>
+    </div>
+
+    <script type="module">
+        // Impor kelas yang dibutuhkan dari library MediaPipe
+        import { FilesetResolver, HandLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.js";
+
+        // Dapatkan referensi ke elemen HTML
+        const video = document.getElementById("webcam");
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+
+        let handLandmarker;
+        let lastVideoTime = -1;
+
+        // Fungsi utama untuk inisialisasi dan memulai semua proses
+        async function setup() {
+            // 1. Inisialisasi MediaPipe Hand Landmarker
+            const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm");
+            handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                baseOptions: {
+                    modelAssetPath: "./hand_landmarker.task",
+                    delegate: "GPU",
+                },
+                runningMode: "VIDEO",
+                numHands: 2, // Bisa deteksi hingga 2 tangan
+            });
+            console.log("Hand Landmarker siap.");
+
+            // 2. Setup Kamera
+            await setupCamera();
+
+            // 3. Mulai loop deteksi
+            predictWebcam();
+        }
+
+        // Fungsi untuk mengaktifkan webcam
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+            });
+            video.srcObject = stream;
+            video.addEventListener("loadeddata", () => {
+                console.log("Kamera berhasil dimuat.");
+            });
+        }
+
+        // Fungsi loop untuk deteksi dan menggambar
+        function predictWebcam() {
+            // Sesuaikan ukuran kanvas dengan ukuran video
+            if (canvas.width !== video.videoWidth) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+            }
+
+            // Hanya deteksi jika video sudah siap
+            if (video.currentTime !== lastVideoTime) {
+                lastVideoTime = video.currentTime;
+                // Deteksi landmarks dari video
+                const results = handLandmarker.detectForVideo(video, performance.now());
+
+                // Bersihkan kanvas sebelum menggambar yang baru
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Jika ada tangan terdeteksi, gambar kerangkanya
+                if (results.landmarks && results.landmarks.length > 0) {
+                    drawLandmarks(results.landmarks);
+                }
+            }
+
+            // Lanjutkan loop di frame berikutnya
+            window.requestAnimationFrame(predictWebcam);
+        }
+
+        // Fungsi untuk menggambar kerangka tangan
+        function drawLandmarks(landmarks) {
+            // Definisikan kuas
+            const pointPaint = { color: '#00FF00', radius: 5 }; // Titik hijau
+            const linePaint = { color: '#FFFFFF', lineWidth: 3 }; // Garis putih
+
+            for (const landmark of landmarks) {
+                // Gambar garis koneksi
+                for (const connection of HandLandmarker.HAND_CONNECTIONS) {
+                    const start = landmark[connection.start];
+                    const end = landmark[connection.end];
+                    ctx.beginPath();
+                    ctx.moveTo(start.x * canvas.width, start.y * canvas.height);
+                    ctx.lineTo(end.x * canvas.width, end.y * canvas.height);
+                    ctx.strokeStyle = linePaint.color;
+                    ctx.lineWidth = linePaint.lineWidth;
+                    ctx.stroke();
+                }
+                // Gambar titik sendi
+                for (const point of landmark) {
+                    ctx.beginPath();
+                    ctx.arc(point.x * canvas.width, point.y * canvas.height, pointPaint.radius, 0, 2 * Math.PI);
+                    ctx.fillStyle = pointPaint.color;
+                    ctx.fill();
+                }
+            }
+        }
+
+        // Jalankan fungsi utama
+        setup();
+    </script>
+</body>
+
+</html>

@@ -67,8 +67,7 @@ async function main() {
   );
   handLandmarker = await HandLandmarker.createFromOptions(filesetResolver, {
     baseOptions: {
-      modelAssetPath:
-        "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+      modelAssetPath: "./hand_landmarker.task",
       delegate: "GPU",
     },
     runningMode: "VIDEO",
@@ -97,7 +96,6 @@ async function setupCamera() {
       video: {
         // --- PERUBAHAN KAMERA BELAKANG ---
         facingMode: "environment",
-        
       },
     });
     video.srcObject = stream;

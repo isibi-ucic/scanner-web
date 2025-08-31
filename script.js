@@ -16,6 +16,7 @@ const debugOutput = document.getElementById("debug-output");
 const suggestionsDiv = document.getElementById("suggestions");
 const resetButton = document.getElementById("reset-button");
 const ctx = canvas.getContext("2d");
+const overlay = document.getElementById("video-overlay");
 
 // --- Variabel Global ---
 let handLandmarker, customTfliteModel, bigramModel, trigramModel;
@@ -315,6 +316,11 @@ function drawLandmarks(landmarks) {
     }
   }
 }
+
+video.addEventListener("playing", () => {
+  logToHTML("Video berhasil diputar!");
+  if (overlay) overlay.style.display = "none";
+});
 
 // --- TITIK AWAL APLIKASI ---
 async function main() {

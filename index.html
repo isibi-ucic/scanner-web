@@ -117,6 +117,14 @@
             font-weight: bold;
             cursor: pointer;
         }
+
+        #video-overlay {
+            position: absolute;
+            inset: 0;
+            background: black;
+            z-index: 5;
+            /* lebih tinggi dari video & canvas */
+        }
     </style>
 </head>
 
@@ -127,6 +135,9 @@
 
         <video id="webcam" autoplay playsinline></video>
         <canvas id="canvas"></canvas>
+        <!-- Overlay hitam -->
+        <div id="video-overlay"></div>
+
         <div id="output">Memuat...</div>
         <div id="suggestions"></div>
     </div>

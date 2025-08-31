@@ -123,6 +123,7 @@ async function setupCamera() {
     // Tambahkan event listener untuk melihat apakah video benar-benar bisa diputar
     video.addEventListener("playing", () => {
       logToHTML("Video berhasil diputar!");
+      if (overlay) overlay.style.display = "none";
     });
 
     // Event listener untuk saat data pertama dimuat
@@ -316,11 +317,6 @@ function drawLandmarks(landmarks) {
     }
   }
 }
-
-video.addEventListener("playing", () => {
-  logToHTML("Video berhasil diputar!");
-  if (overlay) overlay.style.display = "none";
-});
 
 // --- TITIK AWAL APLIKASI ---
 async function main() {

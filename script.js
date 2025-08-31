@@ -1,4 +1,4 @@
-// script.js (Versi Final Lengkap dengan N-Gram)
+// script.js (Versi Final Lengkap)
 
 // --- Impor library ---
 import "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js";
@@ -53,27 +53,17 @@ let currentSentence = "";
 let lastPredictedLetter = "";
 let lastAddedLetter = "";
 let predictionCounter = 0;
-const PREDICTION_THRESHOLD = 50;
+const PREDICTION_THRESHOLD = 50; // Huruf stabil setelah 10 frame
 
-// --- Variabel Baru untuk Timer ---
-let inactivityTimer;
+let inactivityTimer; // Timer untuk reset kalimat
+let spaceTimer; // Timer untuk spasi
+let handPresent = false; // Lacak keberadaan tangan
+
 // --- Fungsi Logging ---
 function logToHTML(message) {
   if (!debugOutput) return;
   debugOutput.innerHTML += `> ${message}<br>`;
   debugOutput.scrollTop = debugOutput.scrollHeight;
-}
-
-// --- FUNGSI BARU UNTUK TIMER ---
-function resetInactivityTimer() {
-  // Hapus timer lama jika ada
-  clearTimeout(inactivityTimer);
-
-  // Atur timer baru selama 5 detik (5000 milidetik)
-  inactivityTimer = setTimeout(() => {
-    logToHTML("Tidak ada aktivitas selama 5 detik, mereset kalimat.");
-    resetSentence();
-  }, 5000);
 }
 
 // --- FUNGSI INISIALISASI ---
@@ -83,7 +73,7 @@ async function initHandLandmarker() {
   );
   handLandmarker = await HandLandmarker.createFromOptions(vision, {
     baseOptions: {
-      modelAssetPath: "./models/hand_landmarker.task", // Pastikan file ini ada di folder models
+      modelAssetPath: "./models/hand_landmarker.task",
       delegate: "GPU",
     },
     runningMode: "VIDEO",
@@ -115,34 +105,58 @@ async function loadNgramModels() {
 }
 
 async function setupCamera() {
-  logToHTML("Setup kamera...");
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment" },
-    });
-    video.srcObject = stream;
-    video.addEventListener("loadeddata", () => {
-      logToHTML("Kamera berhasil dimuat. Memulai deteksi...");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      predictWebcam();
-    });
-  } catch (err) {
-    logToHTML(`Error kamera: ${err.message}`);
-  }
+    logToHTML("Setup kamera...");
+    try {
+        const constraints = {
+            video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                facingMode: 'environment'
+            }
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        logToHTML("Izin kamera didapatkan, stream diterima.");
+        
+        video.srcObject = stream;
+        
+        // Tambahkan event listener untuk melihat apakah video benar-benar bisa diputar
+        video.addEventListener('playing', () => {
+            logToHTML("Video berhasil diputar!");
+        });
+
+        // Event listener untuk saat data pertama dimuat
+        video.addEventListener('loadeddata', () => {
+            logToHTML("Data kamera dimuat, mencoba memulai video...");
+            
+            // --- INI BAGIAN KUNCINYA ---
+            // Secara eksplisit panggil play() untuk memulai stream video
+            video.play().catch(e => {
+                logToHTML(`Error saat play() video: ${e.message}`);
+            });
+            
+            logToHTML("Memulai deteksi...");
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            predictWebcam();
+        });
+
+    } catch (err) {
+        logToHTML(`ERROR SAAT GETUSERMEDIA: ${err.name} - ${err.message}`);
+    }
 }
 
 // --- FUNGSI LOOP & PREDIKSI ---
 function predictWebcam() {
-  if (handLandmarker) {
+  if (handLandmarker && customTfliteModel && video.readyState >= 4) {
     const results = handLandmarker.detectForVideo(video, performance.now());
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     if (results.landmarks.length > 0) {
-      drawLandmarks(results.landmarks);
+      handPresent = true;
+      clearTimeout(spaceTimer); // Batalkan timer spasi karena ada tangan
+      resetInactivityTimer(); // Reset timer idle karena ada aktivitas
 
-      // Jika ada tangan terdeteksi, reset timer. Ini menandakan aktivitas.
-      resetInactivityTimer();
+      drawLandmarks(results.landmarks);
 
       const landmarks = results.landmarks[0];
       const wrist = landmarks[0];
@@ -164,111 +178,116 @@ function predictWebcam() {
 
       inputTensor.dispose();
       prediction.dispose();
+    } else {
+      if (handPresent) {
+        handPresent = false;
+        startSpaceTimer();
+      }
     }
   }
   window.requestAnimationFrame(predictWebcam);
 }
-// Di dalam file script.js
 
+// --- FUNGSI LOGIKA APLIKASI ---
 function processPrediction(newPrediction) {
   if (!newPrediction) return;
-
   if (newPrediction === lastPredictedLetter) {
     predictionCounter++;
   } else {
     predictionCounter = 1;
     lastPredictedLetter = newPrediction;
   }
-
-  // Hanya update saran kata JIKA huruf baru ditambahkan ke kalimat
   if (
     predictionCounter >= PREDICTION_THRESHOLD &&
     newPrediction !== lastAddedLetter
   ) {
     currentSentence += newPrediction;
     lastAddedLetter = newPrediction;
-
-    // Panggil update saran setelah kalimat diubah
     updateWordSuggestions();
   }
+  outputDiv.innerText =
+    currentSentence.trim() + " " + (lastPredictedLetter || "");
+}
 
-  // Update tampilan output utama secara real-time
-  outputDiv.innerText = currentSentence + (lastPredictedLetter || "");
+function updateWordSuggestions() {
+  if (!bigramModel || !trigramModel) return;
+  const words = currentSentence.trim().toLowerCase().split(" ").filter(Boolean);
+  let suggestions = [];
+  if (words.length >= 2) {
+    const lastTwo = words.slice(-2).join(" ");
+    if (trigramModel[lastTwo]) {
+      suggestions = Object.entries(trigramModel[lastTwo])
+        .sort((a, b) => b[1] - a[1])
+        .map((e) => e[0]);
+    }
+  }
+  if (suggestions.length === 0 && words.length >= 1) {
+    const lastOne = words[words.length - 1];
+    if (bigramModel[lastOne]) {
+      suggestions = Object.entries(bigramModel[lastOne])
+        .sort((a, b) => b[1] - a[1])
+        .map((e) => e[0]);
+    }
+  }
+  displaySuggestions(suggestions.slice(0, 3));
 }
 
 function displaySuggestions(suggestionList) {
-  // --- TAMBAHKAN DEBUG DI SINI ---
-  logToHTML(
-    `DEBUG: Menampilkan ${suggestionList.length} saran: [${suggestionList.join(
-      ", "
-    )}]`
-  );
-
-  suggestionsDiv.innerHTML = ""; // Kosongkan saran sebelumnya
-
+  suggestionsDiv.innerHTML = "";
   for (const suggestion of suggestionList) {
     const chip = document.createElement("div");
     chip.className = "chip";
     chip.innerText = suggestion.toUpperCase();
-
     chip.onclick = () => {
-      // Logika untuk menambahkan kata yang disarankan
-      currentSentence += suggestion.toUpperCase() + " ";
-      lastAddedLetter = ""; // Reset agar huruf berikutnya bisa ditambahkan
-      lastPredictedLetter = ""; // Reset prediksi huruf
-
-      // Panggil lagi update saran untuk kata berikutnya
+      currentSentence =
+        currentSentence.trim() + " " + suggestion.toUpperCase() + " ";
+      lastAddedLetter = "";
+      lastPredictedLetter = "";
       updateWordSuggestions();
     };
     suggestionsDiv.appendChild(chip);
   }
 }
-function updateWordSuggestions() {
-  if (!bigramModel || !trigramModel) {
-    logToHTML("DEBUG: Model N-Gram belum siap.");
-    return;
-  }
 
-  const cleanSentence = currentSentence.toLowerCase().replace(/[^a-z\s]/g, "");
-  const words = cleanSentence.split(" ").filter(Boolean); // filter(Boolean) untuk hapus string kosong
-
-  logToHTML(`DEBUG: Menganalisis kalimat: [${words.join(" ")}]`);
-
-  let suggestions = [];
-
-  // Coba prediksi dengan Trigram dulu (konteks 2 kata)
-  if (words.length >= 2) {
-    const lastTwo = words.slice(-2).join(" ");
-    logToHTML(`DEBUG: Mencari Trigram dengan kunci: "${lastTwo}"`);
-    if (trigramModel[lastTwo]) {
-      suggestions = Object.entries(trigramModel[lastTwo])
-        .sort((a, b) => b[1] - a[1])
-        .map((e) => e[0]);
-      logToHTML(`DEBUG: Trigram ditemukan! Saran: ${suggestions.join(", ")}`);
-    } else {
-      logToHTML("DEBUG: Trigram tidak ditemukan.");
-    }
-  }
-
-  // Jika Trigram tidak menghasilkan apa-apa, coba Bigram (konteks 1 kata)
-  if (suggestions.length === 0 && words.length >= 1) {
-    const lastOne = words[words.length - 1];
-    logToHTML(`DEBUG: Mencari Bigram dengan kunci: "${lastOne}"`);
-    if (bigramModel[lastOne]) {
-      suggestions = Object.entries(bigramModel[lastOne])
-        .sort((a, b) => b[1] - a[1])
-        .map((e) => e[0]);
-      logToHTML(`DEBUG: Bigram ditemukan! Saran: ${suggestions.join(", ")}`);
-    } else {
-      logToHTML("DEBUG: Bigram tidak ditemukan.");
-    }
-  }
-
-  // Tampilkan 3 saran teratas
-  displaySuggestions(suggestions.slice(0, 3));
+// --- FUNGSI TIMER & RESET ---
+function resetInactivityTimer() {
+  clearTimeout(inactivityTimer);
+  inactivityTimer = setTimeout(() => {
+    logToHTML("Tidak ada aktivitas selama 10 detik, mereset kalimat.");
+    resetSentence();
+  }, 10000);
 }
 
-// --- FUNGSI MENGGAMBAR & RESET ---
+function startSpaceTimer() {
+  clearTimeout(spaceTimer);
+  spaceTimer = setTimeout(() => {
+    addSpace();
+  }, 5000);
+}
+
+function addSpace() {
+  if (currentSentence.length > 0 && !currentSentence.endsWith(" ")) {
+    logToHTML("Tangan tidak ada, spasi ditambahkan.");
+    currentSentence += " ";
+    lastAddedLetter = "";
+    lastPredictedLetter = "";
+    updateWordSuggestions();
+  }
+}
+
+function resetSentence() {
+  logToHTML("Kalimat direset.");
+  currentSentence = "";
+  lastAddedLetter = "";
+  lastPredictedLetter = "";
+  predictionCounter = 0;
+  outputDiv.innerText = "Arahkan tangan";
+  suggestionsDiv.innerHTML = "";
+  clearTimeout(inactivityTimer);
+  clearTimeout(spaceTimer);
+}
+
+// --- FUNGSI MENGGAMBAR ---
 function drawLandmarks(landmarks) {
   const pointPaint = { color: "#3399FF", radius: 5 };
   const linePaint = { color: "#FFFFFF", lineWidth: 3 };
@@ -298,30 +317,15 @@ function drawLandmarks(landmarks) {
   }
 }
 
-function resetSentence() {
-  logToHTML("Kalimat direset.");
-  currentSentence = "";
-  lastAddedLetter = "";
-  lastPredictedLetter = "";
-  predictionCounter = 0;
-  outputDiv.innerText = "Arahkan tangan";
-  suggestionsDiv.innerHTML = "";
-  // Hentikan juga timer saat mereset manual
-  clearTimeout(inactivityTimer);
-}
-
 // --- TITIK AWAL APLIKASI ---
 async function main() {
   logToHTML("Memulai inisialisasi...");
-
   await Promise.all([
     initHandLandmarker(),
     loadTFLiteModel(),
     loadNgramModels(),
   ]);
-
   resetButton.addEventListener("click", resetSentence);
-
   await setupCamera();
 }
 

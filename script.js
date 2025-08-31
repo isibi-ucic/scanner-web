@@ -105,44 +105,43 @@ async function loadNgramModels() {
 }
 
 async function setupCamera() {
-    logToHTML("Setup kamera...");
-    try {
-        const constraints = {
-            video: {
-                width: { ideal: 640 },
-                height: { ideal: 480 },
-                facingMode: 'environment'
-            }
-        };
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        logToHTML("Izin kamera didapatkan, stream diterima.");
-        
-        video.srcObject = stream;
-        
-        // Tambahkan event listener untuk melihat apakah video benar-benar bisa diputar
-        video.addEventListener('playing', () => {
-            logToHTML("Video berhasil diputar!");
-        });
+  logToHTML("Setup kamera...");
+  try {
+    const constraints = {
+      video: {
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        facingMode: "environment",
+      },
+    };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    logToHTML("Izin kamera didapatkan, stream diterima.");
 
-        // Event listener untuk saat data pertama dimuat
-        video.addEventListener('loadeddata', () => {
-            logToHTML("Data kamera dimuat, mencoba memulai video...");
-            
-            // --- INI BAGIAN KUNCINYA ---
-            // Secara eksplisit panggil play() untuk memulai stream video
-            video.play().catch(e => {
-                logToHTML(`Error saat play() video: ${e.message}`);
-            });
-            
-            logToHTML("Memulai deteksi...");
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            predictWebcam();
-        });
+    video.srcObject = stream;
 
-    } catch (err) {
-        logToHTML(`ERROR SAAT GETUSERMEDIA: ${err.name} - ${err.message}`);
-    }
+    // Tambahkan event listener untuk melihat apakah video benar-benar bisa diputar
+    video.addEventListener("playing", () => {
+      logToHTML("Video berhasil diputar!");
+    });
+
+    // Event listener untuk saat data pertama dimuat
+    video.addEventListener("loadeddata", () => {
+      logToHTML("Data kamera dimuat, mencoba memulai video...");
+
+      // --- INI BAGIAN KUNCINYA ---
+      // Secara eksplisit panggil play() untuk memulai stream video
+      video.play().catch((e) => {
+        logToHTML(`Error saat play() video: ${e.message}`);
+      });
+
+      logToHTML("Memulai deteksi...");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      predictWebcam();
+    });
+  } catch (err) {
+    logToHTML(`ERROR SAAT GETUSERMEDIA: ${err.name} - ${err.message}`);
+  }
 }
 
 // --- FUNGSI LOOP & PREDIKSI ---
@@ -331,3 +330,6 @@ async function main() {
 
 // Jalankan semuanya
 main();
+
+// --- TAMBAHKAN BARIS INI UNTUK MEMBUAT FUNGSI BISA DIAKSES FLUTTER ---
+window.resetSentence = resetSentence;

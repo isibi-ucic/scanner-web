@@ -1,4 +1,4 @@
-// script.js (Dengan Debug di HTML & Kamera Belakang)
+// script.js (Versi Final Lengkap dengan N-Gram)
 
 // --- Impor library ---
 import "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js";
@@ -12,18 +12,13 @@ import {
 const video = document.getElementById("webcam");
 const canvas = document.getElementById("canvas");
 const outputDiv = document.getElementById("output");
-const debugOutput = document.getElementById("debug-output"); // Referensi baru
+const debugOutput = document.getElementById("debug-output");
+const suggestionsDiv = document.getElementById("suggestions");
+const resetButton = document.getElementById("reset-button");
 const ctx = canvas.getContext("2d");
 
-// --- Fungsi Baru untuk Logging ke HTML ---
-function logToHTML(message) {
-  debugOutput.innerHTML += `> ${message}<br>`;
-  // Auto-scroll ke pesan terbaru
-  debugOutput.scrollTop = debugOutput.scrollHeight;
-}
-
-// ... (Variabel & Konstanta lainnya tetap sama)
-let handLandmarker, customTfliteModel;
+// --- Variabel Global ---
+let handLandmarker, customTfliteModel, bigramModel, trigramModel;
 const LABELS = [
   "A",
   "B",
@@ -52,61 +47,84 @@ const LABELS = [
   "Y",
   "Z",
 ];
-let currentSentence = "",
-  lastPredictedLetter = "",
-  lastAddedLetter = "",
-  predictionCounter = 0;
-const PREDICTION_THRESHOLD = 10;
 
-// --- FUNGSI UTAMA ---
-async function main() {
-  logToHTML("Memulai inisialisasi...");
+// --- Variabel State ---
+let currentSentence = "";
+let lastPredictedLetter = "";
+let lastAddedLetter = "";
+let predictionCounter = 0;
+const PREDICTION_THRESHOLD = 50;
 
-  const filesetResolver = await FilesetResolver.forVisionTasks(
+// --- Variabel Baru untuk Timer ---
+let inactivityTimer;
+// --- Fungsi Logging ---
+function logToHTML(message) {
+  if (!debugOutput) return;
+  debugOutput.innerHTML += `> ${message}<br>`;
+  debugOutput.scrollTop = debugOutput.scrollHeight;
+}
+
+// --- FUNGSI BARU UNTUK TIMER ---
+function resetInactivityTimer() {
+  // Hapus timer lama jika ada
+  clearTimeout(inactivityTimer);
+
+  // Atur timer baru selama 5 detik (5000 milidetik)
+  inactivityTimer = setTimeout(() => {
+    logToHTML("Tidak ada aktivitas selama 5 detik, mereset kalimat.");
+    resetSentence();
+  }, 5000);
+}
+
+// --- FUNGSI INISIALISASI ---
+async function initHandLandmarker() {
+  const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
   );
-  handLandmarker = await HandLandmarker.createFromOptions(filesetResolver, {
+  handLandmarker = await HandLandmarker.createFromOptions(vision, {
     baseOptions: {
-      modelAssetPath: "./hand_landmarker.task",
+      modelAssetPath: "./models/hand_landmarker.task", // Pastikan file ini ada di folder models
       delegate: "GPU",
     },
     runningMode: "VIDEO",
     numHands: 1,
   });
   logToHTML("Hand Landmarker siap.");
+}
 
+async function loadTFLiteModel() {
   tflite.setWasmPath(
     "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite/dist/"
   );
   customTfliteModel = await tflite.loadTFLiteModel(
-    "./model_final_tf216.tflite"
+    "./models/model_final_tf216.tflite"
   );
   logToHTML("Model TFLite kustom siap.");
-
-  outputDiv.innerText = "Arahkan tangan";
-
-  await setupCamera();
-  // predictWebcam();
 }
-// Di dalam script.js
+
+async function loadNgramModels() {
+  try {
+    const bigramResponse = await fetch("./models/bigram_model.json");
+    bigramModel = await bigramResponse.json();
+    const trigramResponse = await fetch("./models/trigram_model.json");
+    trigramModel = await trigramResponse.json();
+    logToHTML("Model N-Gram (Bigram & Trigram) siap.");
+  } catch (e) {
+    logToHTML(`Error memuat model N-Gram: ${e}`);
+  }
+}
 
 async function setupCamera() {
   logToHTML("Setup kamera...");
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: "environment",
-      },
+      video: { facingMode: "environment" },
     });
     video.srcObject = stream;
-
-    // Tambahkan event listener ini
     video.addEventListener("loadeddata", () => {
       logToHTML("Kamera berhasil dimuat. Memulai deteksi...");
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-
-      // MULAI LOOP PREDIKSI DI SINI
       predictWebcam();
     });
   } catch (err) {
@@ -114,65 +132,147 @@ async function setupCamera() {
   }
 }
 
+// --- FUNGSI LOOP & PREDIKSI ---
 function predictWebcam() {
-  const results = handLandmarker.detectForVideo(video, performance.now());
+  if (handLandmarker) {
+    const results = handLandmarker.detectForVideo(video, performance.now());
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (results.landmarks.length > 0) {
+      drawLandmarks(results.landmarks);
 
-  if (results.landmarks.length > 0) {
-    drawLandmarks(results.landmarks);
+      // Jika ada tangan terdeteksi, reset timer. Ini menandakan aktivitas.
+      resetInactivityTimer();
 
-    const landmarks = results.landmarks[0];
-    const wrist = landmarks[0];
-    const normalizedLandmarks = [];
-    for (const lm of landmarks) {
-      normalizedLandmarks.push(lm.x - wrist.x);
-      normalizedLandmarks.push(lm.y - wrist.y);
+      const landmarks = results.landmarks[0];
+      const wrist = landmarks[0];
+      const normalizedLandmarks = [];
+      for (const lm of landmarks) {
+        normalizedLandmarks.push(lm.x - wrist.x);
+        normalizedLandmarks.push(lm.y - wrist.y);
+      }
+
+      const inputTensor = tf.tensor2d([normalizedLandmarks], [1, 42]);
+      const prediction = customTfliteModel.predict(inputTensor);
+      const predictionData = prediction.dataSync();
+      const highestProbIndex = predictionData.indexOf(
+        Math.max(...predictionData)
+      );
+      const predictedLetter = LABELS[highestProbIndex];
+
+      processPrediction(predictedLetter);
+
+      inputTensor.dispose();
+      prediction.dispose();
     }
-
-    const inputTensor = tf.tensor2d([normalizedLandmarks], [1, 42]);
-    const prediction = customTfliteModel.predict(inputTensor);
-    const predictionData = prediction.dataSync();
-    const highestProbIndex = predictionData.indexOf(
-      Math.max(...predictionData)
-    );
-    const predictedLetter = LABELS[highestProbIndex];
-
-    processPrediction(predictedLetter);
-
-    inputTensor.dispose();
-    prediction.dispose();
   }
-
   window.requestAnimationFrame(predictWebcam);
 }
+// Di dalam file script.js
+
 function processPrediction(newPrediction) {
   if (!newPrediction) return;
+
   if (newPrediction === lastPredictedLetter) {
     predictionCounter++;
   } else {
     predictionCounter = 1;
     lastPredictedLetter = newPrediction;
   }
+
+  // Hanya update saran kata JIKA huruf baru ditambahkan ke kalimat
   if (
     predictionCounter >= PREDICTION_THRESHOLD &&
     newPrediction !== lastAddedLetter
   ) {
     currentSentence += newPrediction;
     lastAddedLetter = newPrediction;
+
+    // Panggil update saran setelah kalimat diubah
+    updateWordSuggestions();
   }
+
+  // Update tampilan output utama secara real-time
   outputDiv.innerText = currentSentence + (lastPredictedLetter || "");
 }
 
-// --- FUNGSI UNTUK MENGGAMBAR LANDMARK ---
+function displaySuggestions(suggestionList) {
+  // --- TAMBAHKAN DEBUG DI SINI ---
+  logToHTML(
+    `DEBUG: Menampilkan ${suggestionList.length} saran: [${suggestionList.join(
+      ", "
+    )}]`
+  );
+
+  suggestionsDiv.innerHTML = ""; // Kosongkan saran sebelumnya
+
+  for (const suggestion of suggestionList) {
+    const chip = document.createElement("div");
+    chip.className = "chip";
+    chip.innerText = suggestion.toUpperCase();
+
+    chip.onclick = () => {
+      // Logika untuk menambahkan kata yang disarankan
+      currentSentence += suggestion.toUpperCase() + " ";
+      lastAddedLetter = ""; // Reset agar huruf berikutnya bisa ditambahkan
+      lastPredictedLetter = ""; // Reset prediksi huruf
+
+      // Panggil lagi update saran untuk kata berikutnya
+      updateWordSuggestions();
+    };
+    suggestionsDiv.appendChild(chip);
+  }
+}
+function updateWordSuggestions() {
+  if (!bigramModel || !trigramModel) {
+    logToHTML("DEBUG: Model N-Gram belum siap.");
+    return;
+  }
+
+  const cleanSentence = currentSentence.toLowerCase().replace(/[^a-z\s]/g, "");
+  const words = cleanSentence.split(" ").filter(Boolean); // filter(Boolean) untuk hapus string kosong
+
+  logToHTML(`DEBUG: Menganalisis kalimat: [${words.join(" ")}]`);
+
+  let suggestions = [];
+
+  // Coba prediksi dengan Trigram dulu (konteks 2 kata)
+  if (words.length >= 2) {
+    const lastTwo = words.slice(-2).join(" ");
+    logToHTML(`DEBUG: Mencari Trigram dengan kunci: "${lastTwo}"`);
+    if (trigramModel[lastTwo]) {
+      suggestions = Object.entries(trigramModel[lastTwo])
+        .sort((a, b) => b[1] - a[1])
+        .map((e) => e[0]);
+      logToHTML(`DEBUG: Trigram ditemukan! Saran: ${suggestions.join(", ")}`);
+    } else {
+      logToHTML("DEBUG: Trigram tidak ditemukan.");
+    }
+  }
+
+  // Jika Trigram tidak menghasilkan apa-apa, coba Bigram (konteks 1 kata)
+  if (suggestions.length === 0 && words.length >= 1) {
+    const lastOne = words[words.length - 1];
+    logToHTML(`DEBUG: Mencari Bigram dengan kunci: "${lastOne}"`);
+    if (bigramModel[lastOne]) {
+      suggestions = Object.entries(bigramModel[lastOne])
+        .sort((a, b) => b[1] - a[1])
+        .map((e) => e[0]);
+      logToHTML(`DEBUG: Bigram ditemukan! Saran: ${suggestions.join(", ")}`);
+    } else {
+      logToHTML("DEBUG: Bigram tidak ditemukan.");
+    }
+  }
+
+  // Tampilkan 3 saran teratas
+  displaySuggestions(suggestions.slice(0, 3));
+}
+
+// --- FUNGSI MENGGAMBAR & RESET ---
 function drawLandmarks(landmarks) {
-  // Definisikan kuas
   const pointPaint = { color: "#3399FF", radius: 5 };
   const linePaint = { color: "#FFFFFF", lineWidth: 3 };
-
-  // Loop melalui setiap tangan yang terdeteksi (meskipun kita set hanya 1)
   for (const landmark of landmarks) {
-    // Gambar garis koneksi terlebih dahulu
     for (const connection of HandLandmarker.HAND_CONNECTIONS) {
       const start = landmark[connection.start];
       const end = landmark[connection.end];
@@ -183,7 +283,6 @@ function drawLandmarks(landmarks) {
       ctx.lineWidth = linePaint.lineWidth;
       ctx.stroke();
     }
-    // Gambar titik sendi di atas garis
     for (const point of landmark) {
       ctx.beginPath();
       ctx.arc(
@@ -205,13 +304,26 @@ function resetSentence() {
   lastAddedLetter = "";
   lastPredictedLetter = "";
   predictionCounter = 0;
-  // Update tampilan output
   outputDiv.innerText = "Arahkan tangan";
+  suggestionsDiv.innerHTML = "";
+  // Hentikan juga timer saat mereset manual
+  clearTimeout(inactivityTimer);
 }
 
-// Tambahkan event listener untuk tombol
-const resetButton = document.getElementById("reset-button");
-resetButton.addEventListener("click", resetSentence);
+// --- TITIK AWAL APLIKASI ---
+async function main() {
+  logToHTML("Memulai inisialisasi...");
+
+  await Promise.all([
+    initHandLandmarker(),
+    loadTFLiteModel(),
+    loadNgramModels(),
+  ]);
+
+  resetButton.addEventListener("click", resetSentence);
+
+  await setupCamera();
+}
 
 // Jalankan semuanya
 main();

@@ -182,19 +182,16 @@ function predictWebcam() {
   }
   window.requestAnimationFrame(predictWebcam);
 }
-
-// --- FUNGSI LOGIKA APLIKASI ---
 function processPrediction(newPrediction) {
   if (!newPrediction) return;
 
-  // --- LOGIKA BARU ---
-  // Jika prompt "Arahkan tangan" sedang aktif dan prediksi pertama masuk,
-  // segera hapus prompt tersebut.
   if (isShowingPrompt) {
     outputDiv.innerText = "";
     isShowingPrompt = false;
+
+    // TAMBAHKAN BARIS INI untuk menampilkan kembali kotak prediksi
+    livePredictionDiv.style.display = "block";
   }
-  // --- AKHIR LOGIKA BARU ---
 
   if (newPrediction === lastPredictedLetter) {
     predictionCounter++;

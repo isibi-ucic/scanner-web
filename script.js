@@ -14,7 +14,7 @@ const canvas = document.getElementById("canvas");
 const outputDiv = document.getElementById("output");
 const livePredictionDiv = document.getElementById("live-prediction-box");
 const suggestionLine = document.getElementById("suggestion-line");
-const debugOutput = document.getElementById("debug-output");
+const statusText = document.getElementById("loader-text");
 const resetButton = document.getElementById("reset-button");
 const ctx = canvas.getContext("2d");
 const overlay = document.getElementById("video-overlay");
@@ -62,11 +62,9 @@ let spaceTimer;
 let handPresent = false;
 let isShowingPrompt = false; // <-- VARIABEL BARU
 
-// --- Fungsi Logging ---
-function logToHTML(message) {
-  if (!debugOutput) return;
-  debugOutput.innerHTML += `> ${message}<br>`;
-  debugOutput.scrollTop = debugOutput.scrollHeight;
+function updateStatusText(message) {
+  if (!statusText) return;
+  statusText.innerText = message;
 }
 
 // --- FUNGSI INISIALISASI ---
@@ -82,7 +80,7 @@ async function initHandLandmarker() {
     runningMode: "VIDEO",
     numHands: 1,
   });
-  logToHTML("Hand Landmarker siap.");
+  updateStatusText("Detector tangan siap.");
 }
 
 async function loadTFLiteModel() {
@@ -92,7 +90,7 @@ async function loadTFLiteModel() {
   customTfliteModel = await tflite.loadTFLiteModel(
     "./models/model_final_tf216.tflite"
   );
-  logToHTML("Model TFLite kustom siap.");
+  updateStatusText("Model penerjemah siap.");
 }
 
 async function loadNgramModels() {
@@ -101,14 +99,14 @@ async function loadNgramModels() {
     bigramModel = await bigramResponse.json();
     const trigramResponse = await fetch("./models/trigram_model.json");
     trigramModel = await trigramResponse.json();
-    logToHTML("Model N-Gram (Bigram & Trigram) siap.");
+    updateStatusText("Model prediksi kata siap.");
   } catch (e) {
-    logToHTML(`Error memuat model N-Gram: ${e}`);
+    updateStatusText(`Error memuat model N-Gram: ${e}`);
   }
 }
 
 async function setupCamera() {
-  logToHTML("Setup kamera...");
+  updateStatusText("Setup kamera...");
   try {
     const constraints = {
       video: {
@@ -118,26 +116,30 @@ async function setupCamera() {
       },
     };
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    logToHTML("Izin kamera didapatkan, stream diterima.");
+    updateStatusText("Izin kamera didapatkan, stream diterima.");
 
     video.srcObject = stream;
     video.addEventListener("playing", () => {
-      logToHTML("Video berhasil diputar!");
-      if (overlay) overlay.style.display = "none";
+      updateStatusText("Video berhasil diputar!");
+      if (overlay) {
+        overlay.querySelector(".loader").style.display = "none"; // Sembunyikan spinner
+        overlay.style.backgroundColor = "transparent"; // Buat latar belakang transparan
+        updateStatusText("Kamera Siap! Arahkan Tangan Anda."); // Beri pesan final
+      }
     });
 
     video.addEventListener("loadeddata", () => {
-      logToHTML("Data kamera dimuat, mencoba memulai video...");
+      updateStatusText("Data kamera dimuat, mencoba memulai video...");
       video.play().catch((e) => {
-        logToHTML(`Error saat play() video: ${e.message}`);
+        updateStatusText(`Error saat play() video: ${e.message}`);
       });
-      logToHTML("Memulai deteksi...");
+      updateStatusText("Memulai deteksi...");
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       predictWebcam();
     });
   } catch (err) {
-    logToHTML(`ERROR SAAT GETUSERMEDIA: ${err.name} - ${err.message}`);
+    updateStatusText(`ERROR SAAT GETUSERMEDIA: ${err.name} - ${err.message}`);
   }
 }
 
@@ -266,7 +268,7 @@ function updateWordSuggestions() {
 function resetInactivityTimer() {
   clearTimeout(inactivityTimer);
   inactivityTimer = setTimeout(() => {
-    logToHTML("Tidak ada aktivitas selama 10 detik, mereset kalimat.");
+    updateStatusText("Tidak ada aktivitas selama 10 detik, mereset kalimat.");
     resetSentence();
   }, 10000);
 }
@@ -280,7 +282,7 @@ function startSpaceTimer() {
 
 function addSpace() {
   if (currentSentence.length > 0 && !currentSentence.endsWith(" ")) {
-    logToHTML("Tangan tidak ada, spasi ditambahkan.");
+    updateStatusText("Tangan tidak ada, spasi ditambahkan.");
     currentSentence += " ";
     outputDiv.innerText = currentSentence;
     lastAddedLetter = "";
@@ -290,7 +292,7 @@ function addSpace() {
 }
 
 function resetSentence() {
-  logToHTML("Kalimat direset.");
+  updateStatusText("Kalimat direset.");
   currentSentence = "";
   lastAddedLetter = "";
   lastPredictedLetter = "";
@@ -339,7 +341,7 @@ function drawLandmarks(landmarks) {
 
 // --- TITIK AWAL APLIKASI ---
 async function main() {
-  logToHTML("Memulai inisialisasi...");
+  updateStatusText("Memulai inisialisasi...");
   await Promise.all([
     initHandLandmarker(),
     loadTFLiteModel(),

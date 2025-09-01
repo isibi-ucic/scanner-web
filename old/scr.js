@@ -76,7 +76,7 @@ async function initHandLandmarker() {
   );
   handLandmarker = await HandLandmarker.createFromOptions(vision, {
     baseOptions: {
-      modelAssetPath: "./models/hand_landmarker.task",
+      modelAssetPath: "../models/hand_landmarker.task",
       delegate: "GPU",
     },
     runningMode: "VIDEO",
@@ -90,16 +90,16 @@ async function loadTFLiteModel() {
     "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite/dist/"
   );
   customTfliteModel = await tflite.loadTFLiteModel(
-    "./models/model_final_tf216.tflite"
+    "../models/model_final_tf216.tflite"
   );
   logToHTML("Model TFLite kustom siap.");
 }
 
 async function loadNgramModels() {
   try {
-    const bigramResponse = await fetch("./models/bigram_model.json");
+    const bigramResponse = await fetch("../models/bigram_model.json");
     bigramModel = await bigramResponse.json();
-    const trigramResponse = await fetch("./models/trigram_model.json");
+    const trigramResponse = await fetch("../models/trigram_model.json");
     trigramModel = await trigramResponse.json();
     logToHTML("Model N-Gram (Bigram & Trigram) siap.");
   } catch (e) {

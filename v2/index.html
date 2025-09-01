@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>I-Sibi Scanner v2</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #333;
+            color: white;
+            font-family: monospace;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        video,
+        canvas {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: translate(-50%, -50%);
+        }
+
+        canvas {
+            z-index: 2;
+        }
+
+        #debug-output {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            max-height: 25%;
+            overflow-y: scroll;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: #00FF00;
+            font-size: 10px;
+            z-index: 10;
+            padding: 5px;
+            box-sizing: border-box;
+        }
+
+        #reset-button {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            background-color: rgba(255, 255, 255, 0.3);
+            color: white;
+            font-weight: bold;
+            border-radius: 12px;
+            cursor: pointer;
+            z-index: 10;
+            font-family: sans-serif;
+            user-select: none;
+        }
+
+        #video-overlay {
+            position: absolute;
+            inset: 0;
+            background: black;
+            z-index: 5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .loader {
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid #00ff88;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* --- NEW STYLES FOR TEXT DISPLAY --- */
+        #text-display-area {
+            position: absolute;
+            bottom: 40px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            /* Space between sentence line and suggestion line */
+            z-index: 3;
+            font-family: sans-serif;
+            pointer-events: none;
+            /* Prevent text from blocking interactions */
+        }
+
+        #main-sentence-line {
+            display: flex;
+            align-items: baseline;
+            gap: 15px;
+            justify-content: center;
+            text-align: center;
+        }
+
+        #output {
+            font-size: 3rem;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px black;
+        }
+
+        #live-prediction-box {
+            font-size: 2.5rem;
+            font-weight: normal;
+            color: rgba(255, 255, 255, 0.7);
+            /* Dimmer to show it's a prediction */
+            text-shadow: 1px 1px 2px black;
+            min-width: 40px;
+            /* Reserve space to prevent layout shift */
+            text-align: center;
+        }
+
+        #suggestion-line {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #00ff88;
+            /* Highlight color to match loader */
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 8px 16px;
+            border-radius: 20px;
+            text-align: center;
+        }
+
+        #suggestion-line strong {
+            color: white;
+            /* Make the label white */
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <div id="debug-output"></div>
+        <div id="reset-button">RESET</div>
+
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="canvas"></canvas>
+
+        <div id="video-overlay">
+            <div class="loader"></div>
+        </div>
+
+        <div id="text-display-area">
+            <div id="main-sentence-line">
+                <div id="output"></div>
+                <div id="live-prediction-box"></div>
+            </div>
+            <div id="suggestion-line"></div>
+        </div>
+    </div>
+
+    <script type="module" src="script.js"></script>
+</body>
+
+</html>

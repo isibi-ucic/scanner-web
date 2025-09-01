@@ -148,13 +148,25 @@ function predictWebcam() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     if (results.landmarks.length > 0) {
+      // Tangan terdeteksi
       handPresent = true;
+      livePredictionDiv.style.display = "block"; // Tampilkan kotak prediksi
       clearTimeout(spaceTimer);
       resetInactivityTimer();
       drawLandmarks(results.landmarks);
 
       const landmarks = results.landmarks[0];
-      const wrist = landmarks[0];
+
+      // --- LOGIKA BARU UNTUK POSISI DINAMIS ---
+      const wrist = landmarks[0]; // Ambil koordinat pergelangan tangan (landmark ke-0)
+      // Ubah koordinat normal (0-1) menjadi koordinat piksel di kanvas
+      const posX = wrist.x * canvas.width;
+      const posY = wrist.y * canvas.height;
+      // Atur posisi CSS untuk kotak prediksi huruf
+      livePredictionDiv.style.left = `${posX}px`;
+      livePredictionDiv.style.top = `${posY}px`;
+      // --- AKHIR LOGIKA BARU ---
+
       const normalizedLandmarks = [];
       for (const lm of landmarks) {
         normalizedLandmarks.push(lm.x - wrist.x);
@@ -174,14 +186,17 @@ function predictWebcam() {
       inputTensor.dispose();
       prediction.dispose();
     } else {
+      // Tangan tidak terdeteksi
       if (handPresent) {
         handPresent = false;
+        livePredictionDiv.style.display = "none"; // Sembunyikan kotak prediksi
         startSpaceTimer();
       }
     }
   }
   window.requestAnimationFrame(predictWebcam);
 }
+
 function processPrediction(newPrediction) {
   if (!newPrediction) return;
 

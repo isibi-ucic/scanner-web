@@ -287,6 +287,10 @@ function resetSentence() {
   livePredictionDiv.innerText = "";
   suggestionLine.innerHTML = "";
   isShowingPrompt = true; // <-- PERUBAHAN DI SINI
+
+  // TAMBAHKAN BARIS INI untuk menyembunyikan kotak prediksi secara paksa
+  livePredictionDiv.style.display = "none";
+
   clearTimeout(inactivityTimer);
   clearTimeout(spaceTimer);
 }

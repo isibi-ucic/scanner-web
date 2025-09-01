@@ -12,8 +12,9 @@ import {
 const video = document.getElementById("webcam");
 const canvas = document.getElementById("canvas");
 const outputDiv = document.getElementById("output");
+const livePredictionDiv = document.getElementById("live-prediction-box"); // Elemen baru untuk prediksi live
+const suggestionLine = document.getElementById("suggestion-line"); // Elemen baru untuk saran N-gram
 const debugOutput = document.getElementById("debug-output");
-const suggestionsDiv = document.getElementById("suggestions");
 const resetButton = document.getElementById("reset-button");
 const ctx = canvas.getContext("2d");
 const overlay = document.getElementById("video-overlay");
@@ -54,7 +55,7 @@ let currentSentence = "";
 let lastPredictedLetter = "";
 let lastAddedLetter = "";
 let predictionCounter = 0;
-const PREDICTION_THRESHOLD = 50; // Huruf stabil setelah 10 frame
+const PREDICTION_THRESHOLD = 50; // Huruf stabil setelah 50 frame
 
 let inactivityTimer; // Timer untuk reset kalimat
 let spaceTimer; // Timer untuk spasi
@@ -119,23 +120,16 @@ async function setupCamera() {
     logToHTML("Izin kamera didapatkan, stream diterima.");
 
     video.srcObject = stream;
-
-    // Tambahkan event listener untuk melihat apakah video benar-benar bisa diputar
     video.addEventListener("playing", () => {
       logToHTML("Video berhasil diputar!");
       if (overlay) overlay.style.display = "none";
     });
 
-    // Event listener untuk saat data pertama dimuat
     video.addEventListener("loadeddata", () => {
       logToHTML("Data kamera dimuat, mencoba memulai video...");
-
-      // --- INI BAGIAN KUNCINYA ---
-      // Secara eksplisit panggil play() untuk memulai stream video
       video.play().catch((e) => {
         logToHTML(`Error saat play() video: ${e.message}`);
       });
-
       logToHTML("Memulai deteksi...");
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
@@ -154,9 +148,8 @@ function predictWebcam() {
 
     if (results.landmarks.length > 0) {
       handPresent = true;
-      clearTimeout(spaceTimer); // Batalkan timer spasi karena ada tangan
-      resetInactivityTimer(); // Reset timer idle karena ada aktivitas
-
+      clearTimeout(spaceTimer);
+      resetInactivityTimer();
       drawLandmarks(results.landmarks);
 
       const landmarks = results.landmarks[0];
@@ -192,28 +185,35 @@ function predictWebcam() {
 // --- FUNGSI LOGIKA APLIKASI ---
 function processPrediction(newPrediction) {
   if (!newPrediction) return;
+
   if (newPrediction === lastPredictedLetter) {
     predictionCounter++;
   } else {
     predictionCounter = 1;
     lastPredictedLetter = newPrediction;
   }
+
+  // Selalu tampilkan prediksi yang sedang berjalan di kotaknya
+  livePredictionDiv.innerText = lastPredictedLetter || "";
+
+  // Jika prediksi sudah stabil dan belum ditambahkan, tambahkan ke kalimat utama
   if (
     predictionCounter >= PREDICTION_THRESHOLD &&
     newPrediction !== lastAddedLetter
   ) {
     currentSentence += newPrediction;
     lastAddedLetter = newPrediction;
+    outputDiv.innerText = currentSentence; // Update kalimat utama
     updateWordSuggestions();
   }
-  outputDiv.innerText =
-    currentSentence.trim() + " " + (lastPredictedLetter || "");
 }
 
 function updateWordSuggestions() {
   if (!bigramModel || !trigramModel) return;
+
   const words = currentSentence.trim().toLowerCase().split(" ").filter(Boolean);
   let suggestions = [];
+
   if (words.length >= 2) {
     const lastTwo = words.slice(-2).join(" ");
     if (trigramModel[lastTwo]) {
@@ -222,6 +222,7 @@ function updateWordSuggestions() {
         .map((e) => e[0]);
     }
   }
+
   if (suggestions.length === 0 && words.length >= 1) {
     const lastOne = words[words.length - 1];
     if (bigramModel[lastOne]) {
@@ -230,23 +231,15 @@ function updateWordSuggestions() {
         .map((e) => e[0]);
     }
   }
-  displaySuggestions(suggestions.slice(0, 3));
-}
 
-function displaySuggestions(suggestionList) {
-  suggestionsDiv.innerHTML = "";
-  for (const suggestion of suggestionList) {
-    const chip = document.createElement("div");
-    chip.className = "chip";
-    chip.innerText = suggestion.toUpperCase();
-    chip.onclick = () => {
-      currentSentence =
-        currentSentence.trim() + " " + suggestion.toUpperCase() + " ";
-      lastAddedLetter = "";
-      lastPredictedLetter = "";
-      updateWordSuggestions();
-    };
-    suggestionsDiv.appendChild(chip);
+  // Ambil 3 saran teratas dan tampilkan sebagai teks
+  const topSuggestions = suggestions.slice(0, 3);
+  suggestionLine.innerHTML = ""; // Hapus saran sebelumnya
+  if (topSuggestions.length > 0) {
+    const suggestionText = topSuggestions
+      .map((s) => s.toUpperCase())
+      .join(" &nbsp; | &nbsp; ");
+    suggestionLine.innerHTML = `<strong>Prediksi Selanjutnya :</strong> ${suggestionText}`;
   }
 }
 
@@ -270,6 +263,7 @@ function addSpace() {
   if (currentSentence.length > 0 && !currentSentence.endsWith(" ")) {
     logToHTML("Tangan tidak ada, spasi ditambahkan.");
     currentSentence += " ";
+    outputDiv.innerText = currentSentence; // Update tampilan
     lastAddedLetter = "";
     lastPredictedLetter = "";
     updateWordSuggestions();
@@ -282,8 +276,9 @@ function resetSentence() {
   lastAddedLetter = "";
   lastPredictedLetter = "";
   predictionCounter = 0;
-  outputDiv.innerText = "Arahkan tangan";
-  suggestionsDiv.innerHTML = "";
+  outputDiv.innerText = "Arahkan tangan"; // Tampilkan prompt awal
+  livePredictionDiv.innerText = ""; // Kosongkan prediksi live
+  suggestionLine.innerHTML = ""; // Kosongkan saran
   clearTimeout(inactivityTimer);
   clearTimeout(spaceTimer);
 }
@@ -328,6 +323,7 @@ async function main() {
   ]);
   resetButton.addEventListener("click", resetSentence);
   await setupCamera();
+  resetSentence(); // Atur tampilan awal saat pertama kali dimuat
 }
 
 // Jalankan semuanya

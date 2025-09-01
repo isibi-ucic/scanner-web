@@ -1,4 +1,4 @@
-// script.js (Versi Final Lengkap)
+// script.js (Versi Final Lengkap dan Bersih)
 
 // --- Impor library ---
 import "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js";
@@ -14,10 +14,10 @@ const canvas = document.getElementById("canvas");
 const outputDiv = document.getElementById("output");
 const livePredictionDiv = document.getElementById("live-prediction-box");
 const suggestionLine = document.getElementById("suggestion-line");
-const statusText = document.getElementById("loader-text");
+const statusText = document.getElementById("status-text");
 const resetButton = document.getElementById("reset-button");
+const loaderOverlay = document.getElementById("loader-overlay");
 const ctx = canvas.getContext("2d");
-const overlay = document.getElementById("video-overlay");
 
 // --- Variabel Global ---
 let handLandmarker, customTfliteModel, bigramModel, trigramModel;
@@ -56,15 +56,13 @@ let lastPredictedLetter = "";
 let lastAddedLetter = "";
 let predictionCounter = 0;
 const PREDICTION_THRESHOLD = 50;
-
-let inactivityTimer;
-let spaceTimer;
+let inactivityTimer, spaceTimer;
 let handPresent = false;
-let isShowingPrompt = false; // <-- VARIABEL BARU
+let isShowingPrompt = false;
 
+// --- Fungsi Utilitas ---
 function updateStatusText(message) {
-  if (!statusText) return;
-  statusText.innerText = message;
+  if (statusText) statusText.innerText = message;
 }
 
 // --- FUNGSI INISIALISASI ---
@@ -95,18 +93,20 @@ async function loadTFLiteModel() {
 
 async function loadNgramModels() {
   try {
-    const bigramResponse = await fetch("./models/bigram_model.json");
+    const [bigramResponse, trigramResponse] = await Promise.all([
+      fetch("./models/bigram_model.json"),
+      fetch("./models/trigram_model.json"),
+    ]);
     bigramModel = await bigramResponse.json();
-    const trigramResponse = await fetch("./models/trigram_model.json");
     trigramModel = await trigramResponse.json();
     updateStatusText("Model prediksi kata siap.");
   } catch (e) {
-    updateStatusText(`Error memuat model N-Gram: ${e}`);
+    updateStatusText(`Gagal memuat N-Gram: ${e.message}`);
   }
 }
 
 async function setupCamera() {
-  updateStatusText("Setup kamera...");
+  updateStatusText("Membuka kamera...");
   try {
     const constraints = {
       video: {
@@ -116,98 +116,87 @@ async function setupCamera() {
       },
     };
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    updateStatusText("Izin kamera didapatkan, stream diterima.");
-
+    updateStatusText("Izin kamera didapatkan.");
     video.srcObject = stream;
-    video.addEventListener("playing", () => {
-      updateStatusText("Video berhasil diputar!");
-      if (overlay) {
-        overlay.querySelector(".loader").style.display = "none"; // Sembunyikan spinner
-        overlay.style.backgroundColor = "transparent"; // Buat latar belakang transparan
-        updateStatusText("Kamera Siap! Arahkan Tangan Anda."); // Beri pesan final
-      }
-    });
 
     video.addEventListener("loadeddata", () => {
-      updateStatusText("Data kamera dimuat, mencoba memulai video...");
-      video.play().catch((e) => {
-        updateStatusText(`Error saat play() video: ${e.message}`);
-      });
-      updateStatusText("Memulai deteksi...");
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
+      video
+        .play()
+        .catch((e) => updateStatusText(`Error play video: ${e.message}`));
       predictWebcam();
     });
+
+    video.addEventListener("playing", () => {
+      if (loaderOverlay) {
+        loaderOverlay.style.opacity = "0";
+        setTimeout(() => {
+          loaderOverlay.style.display = "none";
+        }, 500);
+      }
+      setTimeout(() => {
+        updateStatusText("Kamera Siap! Arahkan Tangan Anda.");
+      }, 1000);
+    });
   } catch (err) {
-    updateStatusText(`ERROR SAAT GETUSERMEDIA: ${err.name} - ${err.message}`);
+    updateStatusText(`Kamera Error: ${err.name}`);
   }
 }
 
 // --- FUNGSI LOOP & PREDIKSI ---
 function predictWebcam() {
-  if (handLandmarker && customTfliteModel && video.readyState >= 4) {
-    const results = handLandmarker.detectForVideo(video, performance.now());
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!handLandmarker || !customTfliteModel || video.readyState < 4) {
+    window.requestAnimationFrame(predictWebcam);
+    return;
+  }
 
-    if (results.landmarks.length > 0) {
-      // Tangan terdeteksi
-      handPresent = true;
-      livePredictionDiv.style.display = "block"; // Tampilkan kotak prediksi
-      clearTimeout(spaceTimer);
-      resetInactivityTimer();
-      drawLandmarks(results.landmarks);
+  const results = handLandmarker.detectForVideo(video, performance.now());
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      const landmarks = results.landmarks[0];
+  if (results.landmarks && results.landmarks.length > 0) {
+    if (!handPresent) handPresent = true;
 
-      // --- LOGIKA BARU UNTUK POSISI DINAMIS ---
-      const wrist = landmarks[0]; // Ambil koordinat pergelangan tangan (landmark ke-0)
-      // Ubah koordinat normal (0-1) menjadi koordinat piksel di kanvas
-      const posX = wrist.x * canvas.width;
-      const posY = wrist.y * canvas.height;
-      // Atur posisi CSS untuk kotak prediksi huruf
-      livePredictionDiv.style.left = `${posX}px`;
-      livePredictionDiv.style.top = `${posY}px`;
-      // --- AKHIR LOGIKA BARU ---
+    resetInactivityTimer();
+    clearTimeout(spaceTimer);
+    drawLandmarks(results.landmarks);
 
-      const normalizedLandmarks = [];
-      for (const lm of landmarks) {
-        normalizedLandmarks.push(lm.x - wrist.x);
-        normalizedLandmarks.push(lm.y - wrist.y);
-      }
+    const landmarks = results.landmarks[0];
+    const wrist = landmarks[0];
+    const normalizedLandmarks = [];
+    landmarks.forEach((lm) => {
+      normalizedLandmarks.push(lm.x - wrist.x, lm.y - wrist.y);
+    });
 
-      const inputTensor = tf.tensor2d([normalizedLandmarks], [1, 42]);
-      const prediction = customTfliteModel.predict(inputTensor);
-      const predictionData = prediction.dataSync();
-      const highestProbIndex = predictionData.indexOf(
-        Math.max(...predictionData)
-      );
-      const predictedLetter = LABELS[highestProbIndex];
+    const inputTensor = tf.tensor2d([normalizedLandmarks], [1, 42]);
+    const prediction = customTfliteModel.predict(inputTensor);
+    const predictionData = prediction.dataSync();
+    const highestProbIndex = predictionData.indexOf(
+      Math.max(...predictionData)
+    );
+    const predictedLetter = LABELS[highestProbIndex];
 
-      processPrediction(predictedLetter);
+    processPrediction(predictedLetter);
 
-      inputTensor.dispose();
-      prediction.dispose();
-    } else {
-      // Tangan tidak terdeteksi
-      if (handPresent) {
-        handPresent = false;
-        livePredictionDiv.style.display = "none"; // Sembunyikan kotak prediksi
-        startSpaceTimer();
-      }
+    inputTensor.dispose();
+    prediction.dispose();
+  } else {
+    if (handPresent) {
+      handPresent = false;
+      if (livePredictionDiv) livePredictionDiv.innerText = "";
+      startSpaceTimer();
     }
   }
   window.requestAnimationFrame(predictWebcam);
 }
 
+// --- FUNGSI LOGIKA APLIKASI ---
 function processPrediction(newPrediction) {
   if (!newPrediction) return;
 
   if (isShowingPrompt) {
     outputDiv.innerText = "";
     isShowingPrompt = false;
-
-    // TAMBAHKAN BARIS INI untuk menampilkan kembali kotak prediksi
-    livePredictionDiv.style.display = "block";
   }
 
   if (newPrediction === lastPredictedLetter) {
@@ -217,7 +206,8 @@ function processPrediction(newPrediction) {
     lastPredictedLetter = newPrediction;
   }
 
-  livePredictionDiv.innerText = lastPredictedLetter || "";
+  if (livePredictionDiv)
+    livePredictionDiv.innerText = lastPredictedLetter || "";
 
   if (
     predictionCounter >= PREDICTION_THRESHOLD &&
@@ -231,7 +221,7 @@ function processPrediction(newPrediction) {
 }
 
 function updateWordSuggestions() {
-  if (!bigramModel || !trigramModel) return;
+  if (!bigramModel || !trigramModel || !suggestionLine) return;
 
   const words = currentSentence.trim().toLowerCase().split(" ").filter(Boolean);
   let suggestions = [];
@@ -246,7 +236,7 @@ function updateWordSuggestions() {
   }
 
   if (suggestions.length === 0 && words.length >= 1) {
-    const lastOne = words[words.length - 1];
+    const lastOne = words.slice(-1)[0];
     if (bigramModel[lastOne]) {
       suggestions = Object.entries(bigramModel[lastOne])
         .sort((a, b) => b[1] - a[1])
@@ -255,12 +245,13 @@ function updateWordSuggestions() {
   }
 
   const topSuggestions = suggestions.slice(0, 3);
-  suggestionLine.innerHTML = "";
   if (topSuggestions.length > 0) {
     const suggestionText = topSuggestions
       .map((s) => s.toUpperCase())
       .join(" &nbsp; | &nbsp; ");
     suggestionLine.innerHTML = `<strong>Prediksi Selanjutnya :</strong> ${suggestionText}`;
+  } else {
+    suggestionLine.innerHTML = "";
   }
 }
 
@@ -268,45 +259,44 @@ function updateWordSuggestions() {
 function resetInactivityTimer() {
   clearTimeout(inactivityTimer);
   inactivityTimer = setTimeout(() => {
-    updateStatusText("Tidak ada aktivitas selama 10 detik, mereset kalimat.");
+    updateStatusText("Reset karena tidak ada aktivitas.");
     resetSentence();
-  }, 10000);
+  }, 8000);
 }
 
 function startSpaceTimer() {
   clearTimeout(spaceTimer);
-  spaceTimer = setTimeout(() => {
-    addSpace();
-  }, 5000);
+  spaceTimer = setTimeout(addSpace, 3000);
 }
 
 function addSpace() {
   if (currentSentence.length > 0 && !currentSentence.endsWith(" ")) {
-    updateStatusText("Tangan tidak ada, spasi ditambahkan.");
+    updateStatusText("Spasi ditambahkan otomatis.");
     currentSentence += " ";
     outputDiv.innerText = currentSentence;
     lastAddedLetter = "";
     lastPredictedLetter = "";
     updateWordSuggestions();
+    setTimeout(() => {
+      updateStatusText("Kamera Siap! Arahkan Tangan Anda.");
+    }, 2000);
   }
 }
 
 function resetSentence() {
-  updateStatusText("Kalimat direset.");
   currentSentence = "";
   lastAddedLetter = "";
   lastPredictedLetter = "";
   predictionCounter = 0;
-  outputDiv.innerText = "Arahkan tangan";
-  livePredictionDiv.innerText = "";
-  suggestionLine.innerHTML = "";
-  isShowingPrompt = true; // <-- PERUBAHAN DI SINI
 
-  // TAMBAHKAN BARIS INI untuk menyembunyikan kotak prediksi secara paksa
-  livePredictionDiv.style.display = "none";
+  if (outputDiv) outputDiv.innerText = "Arahkan tangan";
+  if (livePredictionDiv) livePredictionDiv.innerText = "";
+  if (suggestionLine) suggestionLine.innerHTML = "";
 
+  isShowingPrompt = true;
   clearTimeout(inactivityTimer);
   clearTimeout(spaceTimer);
+  updateStatusText("Kalimat direset. Arahkan tangan Anda.");
 }
 
 // --- FUNGSI MENGGAMBAR ---
@@ -352,8 +342,6 @@ async function main() {
   resetSentence();
 }
 
-// Jalankan semuanya
 main();
 
-// --- TAMBAHKAN BARIS INI UNTUK MEMBUAT FUNGSI BISA DIAKSES FLUTTER ---
 window.resetSentence = resetSentence;

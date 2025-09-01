@@ -5,7 +5,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>I-Sibi Scanner</title>
-
     <meta name="theme-color" content="#212121">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
@@ -23,10 +22,8 @@
             margin: 0;
             padding: 0;
             overflow: hidden;
-            /* Mencegah scroll yang tidak diinginkan */
             background-color: var(--background-color);
             color: var(--primary-text-color);
-            /* Menggunakan font sans-serif yang modern dan mudah dibaca */
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         }
 
@@ -51,17 +48,110 @@
             z-index: 2;
         }
 
-        /* Tombol Reset Baru (Ikon) */
+        /* --- UI BAGIAN ATAS (STATUS & PREDIKSI LIVE) --- */
+        #top-ui-container {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 400px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        #status-text {
+            width: 100%;
+            text-align: center;
+            font-size: 0.9rem;
+            color: var(--secondary-text-color);
+            background-color: rgba(0, 0, 0, 0.4);
+            padding: 8px;
+            border-radius: 12px;
+            box-sizing: border-box;
+        }
+
+        #live-prediction-box {
+            font-size: clamp(2.5rem, 12vw, 4rem);
+            font-weight: bold;
+            color: var(--primary-text-color);
+            text-shadow: 2px 2px 4px black;
+            min-height: 1.2em;
+            /* Mencegah layout "lompat" */
+        }
+
+        /* Sembunyikan live-prediction-box jika kosong, ini cara paling bersih */
+        #live-prediction-box:empty {
+            display: none;
+        }
+
+
+        /* --- UI BAGIAN BAWAH (HASIL KALIMAT & SARAN) --- */
+        #text-display-area {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            padding: 20px 10px 40px 10px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            z-index: 3;
+            pointer-events: none;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.5), transparent);
+        }
+
+        #main-sentence-line {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            justify-content: center;
+            text-align: center;
+        }
+
+        #output {
+            font-size: clamp(2rem, 12vw, 3.5rem);
+            font-weight: bold;
+            color: var(--primary-text-color);
+            text-shadow: 2px 2px 4px black;
+        }
+
+        #suggestion-line {
+            font-size: clamp(0.9rem, 4vw, 1.2rem);
+            font-weight: bold;
+            color: var(--highlight-color);
+            background-color: var(--dark-overlay);
+            padding: 8px 16px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 90%;
+        }
+
+        #suggestion-line:empty {
+            display: none;
+            /* Sembunyikan jika tidak ada saran */
+        }
+
+        #suggestion-line strong {
+            color: var(--primary-text-color);
+        }
+
+
+        /* --- TOMBOL & LOADER --- */
         #reset-button {
             position: absolute;
             bottom: 15px;
             right: 15px;
             width: 44px;
-            /* Ukuran target sentuh yang baik */
             height: 44px;
             background-color: rgba(255, 255, 255, 0.2);
             border-radius: 50%;
-            /* Membuatnya bulat */
             cursor: pointer;
             z-index: 10;
             user-select: none;
@@ -69,39 +159,20 @@
             justify-content: center;
             align-items: center;
             font-size: 24px;
-            font-weight: bold;
-            color: var(--primary-text-color);
             border: none;
+            color: var(--primary-text-color);
         }
 
-        /* Overlay saat loading */
-        #video-overlay {
+        #loader-overlay {
             position: absolute;
             inset: 0;
             background: var(--background-color);
-            z-index: 5;
+            z-index: 12;
             display: flex;
-            flex-direction: column;
             justify-content: center;
             align-items: center;
-            gap: 20px;
-            /* Tambahkan transisi agar hilangnya smooth */
-            transition: background-color 0.5s ease-in-out;
-        }
-
-        #loader-text {
-            position: absolute;
-            /* Pindahkan ke atas layar */
-            top: 20px;
-            width: 100%;
-            text-align: center;
-            font-size: 1rem;
-            color: var(--secondary-text-color);
-            background-color: rgba(0, 0, 0, 0.3);
-            padding: 5px 0;
-            border-radius: 10px;
-            z-index: 11;
-            /* Pastikan selalu di atas */
+            opacity: 1;
+            transition: opacity 0.5s ease-out;
         }
 
         .loader {
@@ -122,102 +193,30 @@
                 transform: rotate(360deg);
             }
         }
-
-        /* Area Tampilan Teks yang Dioptimalkan */
-        #text-display-area {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            padding: 20px 10px 40px 10px;
-            /* Jarak aman dari tepi layar */
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 15px;
-            z-index: 3;
-            pointer-events: none;
-            background: linear-gradient(to top, rgba(0, 0, 0, 0.5), transparent);
-        }
-
-        #main-sentence-line {
-            display: flex;
-            align-items: baseline;
-            gap: 10px;
-            justify-content: center;
-            text-align: center;
-        }
-
-        /* Font Responsif menggunakan clamp() */
-        #output {
-            font-size: clamp(2rem, 12vw, 3.5rem);
-            /* min, ideal, max */
-            font-weight: bold;
-            color: var(--primary-text-color);
-            text-shadow: 2px 2px 4px black;
-        }
-
-        #live-prediction-box {
-            position: absolute;
-            /* Memungkinkan posisi diatur secara dinamis */
-            z-index: 4;
-            /* Pastikan berada di atas kanvas */
-            font-size: clamp(3rem, 15vw, 5rem);
-            /* Buat sedikit lebih besar agar jelas */
-            font-weight: bold;
-            color: var(--highlight-color);
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
-
-            /* Trik untuk menengahkan elemen pada koordinatnya */
-            transform: translate(-50%, -50%);
-
-            /* Hapus min-width dan text-align */
-            pointer-events: none;
-            /* Agar tidak bisa diklik/interaksi */
-            display: none;
-            /* Sembunyikan secara default */
-        }
-
-        #live-prediction-box:empty {
-            display: none;
-        }
-
-        #suggestion-line {
-            font-size: clamp(0.9rem, 4vw, 1.2rem);
-            font-weight: bold;
-            color: var(--highlight-color);
-            background-color: var(--dark-overlay);
-            padding: 8px 16px;
-            border-radius: 20px;
-            text-align: center;
-            max-width: 90%;
-        }
-
-        #suggestion-line strong {
-            color: var(--primary-text-color);
-        }
     </style>
 </head>
 
 <body>
     <div id="container">
-        <button id="reset-button" aria-label="Reset Kalimat">&#10005;</button>
-
         <video id="webcam" autoplay playsinline></video>
         <canvas id="canvas"></canvas>
 
-        <div id="video-overlay">
-            <div class="loader"></div>
-            <div id="loader-text">Menyiapkan Kamera...</div>
+        <div id="top-ui-container">
+            <div id="status-text">Memulai...</div>
+            <div id="live-prediction-box"></div>
         </div>
 
         <div id="text-display-area">
             <div id="main-sentence-line">
                 <div id="output"></div>
-                <div id="live-prediction-box"></div>
             </div>
             <div id="suggestion-line"></div>
+        </div>
+
+        <button id="reset-button" aria-label="Reset Kalimat">&#10005;</button>
+
+        <div id="loader-overlay">
+            <div class="loader"></div>
         </div>
     </div>
 
